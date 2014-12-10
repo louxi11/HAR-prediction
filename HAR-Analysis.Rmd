@@ -11,7 +11,7 @@ We classify whether exercises (specifically barbell lifts) were performed in one
 Data reading and cleaning
 -------------------------
 
-The tracking device data is present in a .csv file, and was originally sourced from the [Weight Lifting Exercises Dataset](http://groupware.les.inf.puc-rio.br/har) (we refer to the hyperlink for a more detailed description of predictors and labels). We start by setting our working directory to be the one containing this file, loading the caret package that contains wrappers for the machine learning procedures we intend to apply, and setting a seed to ensure reproducibility.
+The tracking device data is present in a .csv file, and was originally sourced from the [Weight Lifting Exercises Dataset](http://groupware.les.inf.puc-rio.br/har) (we refer to the linked weg page for a more detailed description of predictors and labels). We start by setting our working directory to be the one containing this file, loading the caret package that contains wrappers for the machine learning procedures we intend to apply, and setting a seed to ensure reproducibility.
 ```{r}
 setwd("~/github/HAR-prediction/")
 library(caret)
@@ -70,12 +70,12 @@ accuracy <- function (x) { sum(x) / length(x) } # To be applied onto a vector of
 oos_accuracy <- accuracy(pred.cv == crossval$classe)
 paste('Estimated out-of-sample accuracy: ', round(100 * oos_accuracy, 2), '%.', sep='')
 ```
-We can also perform some basic analysis of the resulting prediction model. Its most important features -- that is, the features that, averaged over the 500 individual decision trees, decrease the forest's Gini coefficient the most -- are shown below.
+We can also perform some basic analysis of the resulting prediction model. Its most important features -- that is, the features that, averaged over the 500 individual decision trees, decrease the forest's Gini impurity the most when split on them -- are shown below.
 ```{r, fig.align='center'}
 xx <- rownames(fit.rf$finalModel$importance)[sort.int(fit.rf$finalModel$importance, decreasing = T, index.return = T)$ix[1:7]]
 yy <- fit.rf$finalModel$importance[sort.int(fit.rf$finalModel$importance, decreasing = T, index.return = T)$ix[1:7]]
 varimp.df <- data.frame(xx, yy)
-ggplot(varimp.df, aes(x = xx, y = yy)) + theme(axis.text.x=element_text(angle=25, hjust=1)) + geom_bar(stat = 'identity', fill = 'orangered3') + labs(x = 'Feature', y = 'Mean Gini coefficient decrease', title = 'Most important model features')
+ggplot(varimp.df, aes(x = xx, y = yy)) + theme(axis.text.x=element_text(angle=25, hjust=1)) + geom_bar(stat = 'identity', fill = 'orangered3') + labs(x = 'Feature', y = 'Mean Gini impurity decrease', title = 'Most important model features')
 ```
 
 Note that the decision to keep num\_window when removing the factor variables in the preprocessing step paid off, with num\_window being the single most important predictor of the model.
