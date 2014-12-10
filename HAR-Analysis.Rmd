@@ -1,0 +1,81 @@
+---
+title: "Human Activity Recognition with Random Forests"
+output: html_document
+---
+
+Summary
+-------
+
+We classify whether exercises (specifically barbell lifts) were performed in one of five correct or incorrect ways using data from human activity trackers such as Jawbone Up, Fitbit, or the Nike FuelBand. The classification is done using a random forest model trained on roughly 13,700 observations. Out-of-sample accuracy of the model is about 99.8%.
+
+Data reading and cleaning
+-------------------------
+
+The tracking device data is present in a .csv file, and was originally sourced from the [Weight Lifting Exercises Dataset](http://groupware.les.inf.puc-rio.br/har) (we refer to the hyperlink for a more detailed description of predictors and labels). We start by setting our working directory to be the one containing this file, loading the caret package that contains wrappers for the machine learning procedures we intend to apply, and setting a seed to ensure reproducibility.
+```{r}
+setwd("~/github/HAR-prediction/")
+library(caret)
+library(randomForest)
+set.seed(1337)
+```
+We then read in the raw data.
+```{r}
+raw <- read.csv('pml-training.csv', header = T)
+```
+In its original form, the resulting data frame contains NA values. From inspection of the data, it turns out that each column either contains no NA values at all or consists mostly of NA values. We restrict our analysis to the columns without NA values. Furthermore, we drop the variables X (which just counts the observations), user_name, and three timestamp variables. These are the first five variables in the original data set.
+```{r}
+raw <- raw[colSums(is.na(raw)) == 0]
+raw <- raw[-(1:5)]
+```
+From further visual inspection, all variables (except classe and user_name) are of numeric type. However, some are presented as factors, as we show for an excerpt of the 100-odd total variables:
+```{r}
+sapply(raw[-88], is.factor)[10:20]
+```
+The main reason for the conversion to factor variables is that most of the corresponding columns contain no data for about 98% of observations, and often no meaningful data for the remaining 2%. This can be seen e.g. here:
+```{r}
+summary(raw$amplitude_yaw_belt)
+```
+We therefore ignore these factor columns as well. Note that the first variable (new_window) and the last variable (classe) stay in the data frame, since they are factor variables encoding relevant information.
+```{r}
+raw <- raw[c(T, !sapply(raw[-c(1, 88)], is.factor), T)]
+```
+The resulting data is fit to be applied to a machine learning algorithm.
+
+Data preprocessing and model training
+-------------------------------------
+
+Our sole preprocessing consists of randomly splitting the raw data into a training set containing about 70% of the total observations, and a cross-validation set containing the remaining 30%. The cross-validation set here will exclusively be used to estimate out-of-sample error. Setting the seed above ensured reproducibility.
+```{r}
+trainID  <- createDataPartition(raw$classe, p = .7, list = F)
+training <- raw[trainID,]
+crossval <- raw[-trainID,]
+```
+We then fit a random forest onto the training data, using all remaining variables as predictors of the classe labels. Training took about one hour on a 2014 Macbook Pro. In order to avoid redoing this computation when recompiling this writeup, the fitted model is stored in the working directory after being computed first, and loaded directly from there afterwards.
+```{r}
+if (file.exists('fit_rf.RData')) {
+    load('fit_rf.RData')
+    } else {
+    fit.rf <- train(classe ~ ., data = training, method = 'rf')
+    save(fit.rf, file = 'fit_rf.RData')
+    }
+```
+
+Predictions, out-of-sample accuracy and model analysis
+------------------------------------------------------
+
+We are now able to predict the classe labels on the cross-validation set using the trained model. The prediction accuracy on the cross-validation set, and hence the estimated out-of-sample accuracy, is about 99.8%.
+```{r}
+pred.cv <- predict(fit.rf, crossval)
+accuracy <- function (x) { sum(x) / length(x) } # To be applied onto a vector of logicals
+oos_accuracy <- accuracy(pred.cv == crossval$classe)
+paste('Estimated out-of-sample accuracy: ', round(100 * oos_accuracy, 2), '%.', sep='')
+```
+We can also perform some basic analysis of the resulting prediction model. Its most important features -- that is, the features that, averaged over the 500 individual decision trees, decrease the forest's Gini coefficient the most -- are shown below.
+```{r, fig.align='center'}
+xx <- rownames(fit.rf$finalModel$importance)[sort.int(fit.rf$finalModel$importance, decreasing = T, index.return = T)$ix[1:7]]
+yy <- fit.rf$finalModel$importance[sort.int(fit.rf$finalModel$importance, decreasing = T, index.return = T)$ix[1:7]]
+varimp.df <- data.frame(xx, yy)
+ggplot(varimp.df, aes(x = xx, y = yy)) + theme(axis.text.x=element_text(angle=25, hjust=1)) + geom_bar(stat = 'identity', fill = 'orangered3') + labs(x = 'Feature', y = 'Mean Gini coefficient decrease', title = 'Most important model features')
+```
+
+Note that the decision to keep num\_window when removing the factor variables in the preprocessing step paid off, with num\_window being the single most important predictor of the model.
